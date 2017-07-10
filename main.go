@@ -11,13 +11,12 @@ import (
 	"time"
 	"github.com/buger/jsonparser"
 	"io/ioutil"
-	"github.com/rs/xid"
-	"container/list"
+	"github.com/pborman/uuid"
 	sms "stathat.com/c/amzses"
 )
 
 type Alert struct {
-	id             int64  `json:"id"`
+	id             string  `json:"id"`
 	email          string `json:"name"`
 	coin           string `json:"coin"` // currency symbol
 	timeDelta      string `json:"time_delta"`
@@ -28,7 +27,7 @@ type Alert struct {
 }
 
 type Notification struct {
-	id             int64  `json:"id"`
+	id             string  `json:"id"`
 	alertId        string `json:"alert_id"`
 	email          string `json:"name"`
 	coin           string `json:"coin"`
@@ -43,18 +42,18 @@ const appName = "CryptoAlarms"
 const emailDisplayName = "CryptoAlarms Notifications"
 const domain = "https=//www.cryptoalarms.com/"
 const adminEmail = "chris@blackshoalgroup.com"
-const SIX_HOURS_MS = 1000*60*60*6
+const SIX_HOURS_MS = 1000 * 60 * 60 * 6
 
-func makeTimestamp()int64 {
-	return time.Now().UnixNano() / (int64(time.Millisecond)/int64(time.Nanosecond))
+func makeTimestamp() int64 {
+	return time.Now().UnixNano() / (int64(time.Millisecond) / int64(time.Nanosecond))
 }
 
 func insertNotification(n Notification) {
 	_, err := db.Query("insert into Notifications(id, alertId, email, coin, current_delta, threshold_delta, created_at)" +
 		" values($1, $2, $3, $4, $5, $6, $7)",
 		n.id, n.alertId, n.email, n.coin, n.currentDelta, n.thresholdDelta, n.createdAt)
-	if (err) {
-		log.ERROR("error inserting notification: $1", err)
+	if (err != nil) {
+		log.ERROR("error inserting notification: $1", err.Error())
 	}
 }
 
@@ -66,8 +65,8 @@ func sendNotificationsToUser(email string, ns []Notification) string {
 	// func SendMailHTML(from, to, subject, bodyText, bodyHTML string) (string, error)
 
 	res, err := sms.SendMailHTML(adminEmail, email, subject, "", body)
-	if (err) {
-		log.ERROR(email, err)
+	if (err != nil) {
+		log.ERROR(email, err.Error())
 	}
 
 	return res
@@ -82,7 +81,7 @@ func noRecentViolations(email string, coin string) bool {
 	rows, err := db.Query("select * from Notifications where created_at = " +
 		"(select max(created_at) from Notifications where email = $1 and coin = $2) " +
 		"and email = $1 and coin = $2", email, coin)
-	if (err) {
+	if (err != nil) {
 		return true // no rows.
 	}
 
@@ -98,8 +97,8 @@ func runCoinTask() {
 
 	rows, err := db.Query("select * from CoinAlerts where active = true")
 
-	if (err) {
-		log.ERROR(err)
+	if (err != nil) {
+		log.ERROR(err.Error())
 	}
 
 	defer rows.Close()
@@ -112,7 +111,7 @@ func runCoinTask() {
 		var alert *Alert
 		err := rows.Scan(&alert)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal(err.Error())
 		}
 
 		var coinData []byte
@@ -122,8 +121,8 @@ func runCoinTask() {
 		} else {
 			// Coin not present in map, retrieve from api.
 			res, err := http.Get("https://api.coinmarketcap.com/v1/ticker/")
-			if (err) {
-				log.Fatal(err)
+			if (err != nil) {
+				log.Fatal(err.Error())
 			}
 
 			body, err := ioutil.ReadAll(res.Body)
@@ -135,13 +134,13 @@ func runCoinTask() {
 		}
 
 		// Parse the coin data for the change.
-		var change float32
+		var change float64
 		if value, err := jsonparser.GetFloat(coinData, alert.timeDelta); err == nil {
 			change = value
 		}
 
 		if (isViolation(change, alert.thresholdDelta) && noRecentViolations(alert.email, alert.coin)) {
-			guid := xid.New()
+			guid := uuid.New()
 			createdAt := makeTimestamp()
 			notification := Notification{
 				guid, alert.id, alert.email, alert.coin, change, alert.thresholdDelta, createdAt,
@@ -149,9 +148,9 @@ func runCoinTask() {
 
 			insertNotification(notification)
 
-			if _, ok := notificationMap[alert.email]; !ok {
-				notificationMap[alert.email] = list.New()
-			}
+			//if _, ok := notificationMap[alert.email]; !ok {
+			//	notificationMap[alert.email] = []
+			//}
 			// Append notification to list.
 			notificationMap[alert.email] = append(notificationMap[alert.email], notification)
 		} // else no violation, continue.
@@ -161,7 +160,7 @@ func runCoinTask() {
 
 	err = rows.Err()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err.Error())
 	}
 
 	// Send out the aggregated emails.
@@ -198,9 +197,9 @@ func main() {
 	//e.PUT("/notifications/:email", addNotification)
 
 	var err error
-	db, err = sql.Open("postgres", "user=pqgotest dbname=pqgotest sslmode=verify-full")
+	db, err = sql.Open("postgres", "user=cbono password=cbono dbname=crypto") // sslmode=verify-full")
 	if err != nil {
-		log.ERROR(err)
+		log.ERROR(err.Error())
 	}
 
 	// Start the web server.

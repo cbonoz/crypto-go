@@ -3,15 +3,15 @@ package main
 import (
 	"github.com/labstack/echo"
 	"time"
-	"github.com/rs/xid"
 	"net/http"
+	"github.com/pborman/uuid"
 )
 
 func deleteAlert(c echo.Context) error {
 	id := c.Param("id")
 	_, err := db.Query("delete * from CoinAlerts where id=$1", id)
-	if (err) {
-		return c.String(http.StatusBadRequest, err)
+	if (err != nil) {
+		return c.String(http.StatusBadRequest, err.Error())
 	}
 
 	return c.String(http.StatusOK, id)
@@ -22,8 +22,8 @@ func getAlerts(c echo.Context) error {
 	rows, err := db.Query("SELECT name FROM CoinAlerts WHERE email = $email", email)
 	defer rows.Close()
 
-	if (err) {
-		return c.String(http.StatusInternalServerError, err)
+	if (err != nil) {
+		return c.String(http.StatusInternalServerError, err.Error())
 	}
 
 	return c.String(http.StatusOK, rows)
@@ -33,8 +33,8 @@ func getNotifications(c echo.Context) error {
 	email := c.Param("email")
 	rows, err := db.Query("SELECT name FROM Notifications WHERE email = $email", email)
 
-	if (err) {
-		return c.String(http.StatusInternalServerError, err)
+	if (err != nil) {
+		return c.String(http.StatusInternalServerError, err.Error())
 	}
 
 	return c.String(http.StatusOK, rows)
@@ -48,12 +48,12 @@ func addAlert(c echo.Context) error {
 	notes := c.Param("notes")
 	active := c.Param("active")
 	createdAt := time.Now().UTC()
-	guid := xid.New()
+	guid := uuid.New()
 	_, err := db.Query("insert into Alerts(id, email, coin, threshold_delta, time_delta, created_at) " +
 		"values($1, $2, $3, $4, $5, $6, $7, $8))", guid, email, coin, thresholdDelta, timeDelta, notes, active, createdAt)
 
-	if (err) {
-		return c.String(http.StatusInternalServerError, err)
+	if (err != nil) {
+		return c.String(http.StatusInternalServerError, err.Error())
 	}
 
 	// TODO: replace with standardized response for successful creation of notification.
@@ -67,14 +67,14 @@ func addNotification(c echo.Context) error {
 	coin := c.Param("coin")
 	thresholdDelta := c.Param("threshold_delta")
 	currentDelta := c.Param("current_delta")
-	guid := xid.New()
+	guid := uuid.New()
 
 	createdAt := time.Now().UTC()
 	_, err := db.Query("insert into Notifications(id, alertId, email, coin, current_delta, threshold_delta, created_at)" +
 		" values($1, $2, $3, $4, $5, $6, $7)", guid, alertId, email, coin, currentDelta, thresholdDelta, createdAt)
 
-	if (err) {
-		return c.String(http.StatusInternalServerError, err)
+	if (err != nil) {
+		return c.String(http.StatusInternalServerError, err.Error())
 	}
 
 	// TODO: replace with standardized response for successful creation of notification.
