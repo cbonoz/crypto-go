@@ -2,14 +2,38 @@ package main
 
 import (
 	"github.com/labstack/echo"
-	"time"
 	"net/http"
-	"github.com/pborman/uuid"
+	"encoding/json"
+	"database/sql"
+	"strconv"
 )
+
+func getArrayStringFromRows(rows *sql.Rows) string {
+	var res = "["
+
+	for rows.Next() {
+		var alert Alert
+		rows.Scan(&alert)
+		out, err := json.Marshal(alert)
+		if err != nil {
+			log.Error(err)
+		}
+		res += string(out) + ","
+	}
+
+	sz := len(res)
+	if (sz > 1) {
+		// strip off last comma.
+		res = res[:sz - 1]
+	}
+	res += "]"
+	return res
+}
 
 func deleteAlert(c echo.Context) error {
 	id := c.Param("id")
-	_, err := db.Query("delete * from CoinAlerts where id=$1", id)
+	rows, err := db.Raw("delete * from alerts where id=$1", id).Rows()
+	defer rows.Close()
 	if (err != nil) {
 		return c.String(http.StatusBadRequest, err.Error())
 	}
@@ -19,66 +43,49 @@ func deleteAlert(c echo.Context) error {
 
 func getAlerts(c echo.Context) error {
 	email := c.Param("email")
-	rows, err := db.Query("SELECT name FROM CoinAlerts WHERE email = $email", email)
+	rows, err := db.Raw("SELECT name FROM alerts WHERE email = $1", email).Rows()
 	defer rows.Close()
 
 	if (err != nil) {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
 
-	return c.String(http.StatusOK, rows)
+	return c.String(http.StatusOK, getArrayStringFromRows(rows))
 }
 
 func getNotifications(c echo.Context) error {
 	email := c.Param("email")
-	rows, err := db.Query("SELECT name FROM Notifications WHERE email = $email", email)
+	rows, err := db.Raw("SELECT name FROM notifications WHERE email = $1", email).Rows()
+	defer rows.Close()
 
 	if (err != nil) {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
 
-	return c.String(http.StatusOK, rows)
+	return c.String(http.StatusOK, getArrayStringFromRows(rows))
 }
 
 func addAlert(c echo.Context) error {
 	email := c.Param("email")
 	coin := c.Param("coin")
-	thresholdDelta := c.Param("threshold_delta")
-	timeDelta := c.Param("time_delta")
 	notes := c.Param("notes")
-	active := c.Param("active")
-	createdAt := time.Now().UTC()
-	guid := uuid.New()
-	_, err := db.Query("insert into Alerts(id, email, coin, threshold_delta, time_delta, created_at) " +
-		"values($1, $2, $3, $4, $5, $6, $7, $8))", guid, email, coin, thresholdDelta, timeDelta, notes, active, createdAt)
+	timeDelta := c.Param("time_delta")
 
+	thresholdDelta, err  := strconv.ParseFloat(c.Param("threshold_delta"), 64)
 	if (err != nil) {
-		return c.String(http.StatusInternalServerError, err.Error())
+		return c.String(http.StatusBadRequest, "threshold must be a float")
 	}
+
+	active,err  := strconv.ParseBool(c.Param("active"))
+	if (err != nil) {
+		return c.String(http.StatusBadRequest, "active must be a true or false value")
+	}
+	alert := Alert{email: email, coin: coin, thresholdDelta: thresholdDelta, timeDelta: timeDelta, notes: notes, active: active}
+
+	db.Create(&alert)
 
 	// TODO: replace with standardized response for successful creation of notification.
 	res := "added alert"
-	return c.String(http.StatusOK, res)
-}
-
-func addNotification(c echo.Context) error {
-	alertId := c.Param("alertId")
-	email := c.Param("email")
-	coin := c.Param("coin")
-	thresholdDelta := c.Param("threshold_delta")
-	currentDelta := c.Param("current_delta")
-	guid := uuid.New()
-
-	createdAt := time.Now().UTC()
-	_, err := db.Query("insert into Notifications(id, alertId, email, coin, current_delta, threshold_delta, created_at)" +
-		" values($1, $2, $3, $4, $5, $6, $7)", guid, alertId, email, coin, currentDelta, thresholdDelta, createdAt)
-
-	if (err != nil) {
-		return c.String(http.StatusInternalServerError, err.Error())
-	}
-
-	// TODO: replace with standardized response for successful creation of notification.
-	res := "added notification"
 	return c.String(http.StatusOK, res)
 }
 
