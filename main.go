@@ -16,22 +16,22 @@ import (
 
 type Alert struct {
 	gorm.Model
-	name          string `json:"name"`
-	email         string `json:"email"`
-	coin           string `json:"coin"` // currency symbol
-	thresholdDelta float64 `json:"threshold_delta"`
-	timeDelta      string `json:"time_delta"`
-	notes          string `json:"notes"`
-	active         bool `json:"active"`
+	Name          string
+	Email         string
+	Coin           string
+	ThresholdDelta float64
+	TimeDelta      string
+	Notes          string
+	Active         bool
 }
 
 type Notification struct {
 	gorm.Model
-	alertId        uint `json:"alert_id"`
-	email          string `json:"email"`
-	coin           string `json:"coin"`
-	currentDelta   float64 `json:"current_delta"`
-	thresholdDelta float64 `json:"threshold_delta"`
+	AlertId        uint
+	Email          string
+	Coin           string
+	CurrentDelta   float64
+	ThresholdDelta float64
 }
 
 var db gorm.DB
@@ -45,9 +45,9 @@ const MIN_HOUR_EMAIL_INTERVAL = 12
 
 
 func insertNotification(n Notification) {
-	_, err := db.Raw("insert into Notifications(id, alertId, email, coin, current_delta, threshold_delta, Created_at)" +
+	_, err := db.Raw("insert into Notifications(id, alertId, email, Coin, current_delta, threshold_delta, Created_at)" +
 		" values($1, $2, $3, $4, $5, $6, $7)",
-		n.ID, n.alertId, n.email, n.coin, n.currentDelta, n.thresholdDelta, n.CreatedAt).Rows()
+		n.ID, n.AlertId, n.Email, n.Coin, n.CurrentDelta, n.ThresholdDelta, n.CreatedAt).Rows()
 	if (err != nil) {
 		log.Error("error inserting notification: $1", err.Error())
 	}
@@ -72,11 +72,11 @@ func isViolation(change float64, threshold float64) bool {
 	return (threshold < 0 && change < threshold) || (threshold > 0 && change > threshold)
 }
 
-func noRecentViolations(email string, coin string) bool {
-	// Retrieve the latest alert for the user for this particular coin (if present).
+func noRecentViolations(email string, Coin string) bool {
+	// Retrieve the latest alert for the user for this particular Coin (if present).
 	rows, err := db.Raw("select * from Notifications where Created_at = " +
-		"(select max(Created_at) from Notifications where email = $1 and coin = $2) " +
-		"and email = $1 and coin = $2", email, coin).Rows()
+		"(select max(Created_at) from Notifications where email = $1 and Coin = $2) " +
+		"and email = $1 and Coin = $2", email, Coin).Rows()
 	if (err != nil) {
 		return true // no rows.
 	}
@@ -101,7 +101,7 @@ func runCoinTask() {
 	defer rows.Close()
 
 	log.Debug("Found $1 active alerts", rows.Next())
-	var coinDeltas = make(map[string][]byte)
+	var CoinDeltas = make(map[string][]byte)
 
 	var notificationMap = make(map[string][]Notification)
 	for rows.Next() {
@@ -111,35 +111,35 @@ func runCoinTask() {
 			log.Error(err.Error())
 		}
 
-		var coinData []byte
+		var CoinData []byte
 
-		if val, ok := coinDeltas[alert.coin]; ok {
-			coinData = val
+		if val, ok := CoinDeltas[alert.Coin]; ok {
+			CoinData = val
 		} else {
 			// Coin not present in map, retrieve from api.
-			res, err := http.Get("https://api.coinmarketcap.com/v1/ticker/")
+			res, err := http.Get("https://api.Coinmarketcap.com/v1/ticker/")
 			if (err != nil) {
 				log.Error(err.Error())
 			}
 
 			body, err := ioutil.ReadAll(res.Body)
 
-			coinDeltas[alert.coin] = body
-			coinData = body
+			CoinDeltas[alert.Coin] = body
+			CoinData = body
 			// Close the response body after usage is complete.
 			res.Body.Close()
 		}
 
-		// Parse the coin data for the change.
+		// Parse the Coin data for the change.
 		var change float64
-		if value, err := jsonparser.GetFloat(coinData, alert.timeDelta); err == nil {
+		if value, err := jsonparser.GetFloat(CoinData, alert.TimeDelta); err == nil {
 			change = value
 		}
 
-		if (isViolation(change, alert.thresholdDelta) && noRecentViolations(alert.email, alert.coin)) {
+		if (isViolation(change, alert.ThresholdDelta) && noRecentViolations(alert.Email, alert.Coin)) {
 			notification := Notification{
-				alertId: alert.ID, email: alert.email, coin: alert.coin,
-				currentDelta: change, thresholdDelta: alert.thresholdDelta,
+				AlertId: alert.ID, Email: alert.Email, Coin: alert.Coin,
+				CurrentDelta: change, ThresholdDelta: alert.ThresholdDelta,
 			}
 
 			insertNotification(notification)
@@ -148,7 +148,7 @@ func runCoinTask() {
 			//	notificationMap[alert.email] = []
 			//}
 			// Append notification to list.
-			notificationMap[alert.email] = append(notificationMap[alert.email], notification)
+			notificationMap[alert.Email] = append(notificationMap[alert.Email], notification)
 		} // else no violation, continue.
 
 
@@ -173,19 +173,22 @@ func main() {
 
 	e := echo.New()
 
-	// Sample hello world route (for testing).
+	// Sample hello world routes (for testing).
 	e.GET("/hello", func(c echo.Context) error {
 		return c.String(http.StatusOK, "Hello, World!")
 	})
+	e.GET("/hello/:name", func(c echo.Context) error {
+		return c.String(http.StatusOK, "Hello, " + c.Param("name"))
+	})
 
 	// Routes for manipulating alerts.
-	e.PUT("/alerts/:email", addAlert)
+	e.POST("/alerts", addAlert)
 	e.GET("/alerts/:email", getAlerts)
 	e.DELETE("/alerts/:id", deleteAlert)
 
 	// Routes for manipulating notifications generated by alerts.
 	e.GET("/notifications/:email", getNotifications)
-	//e.PUT("/notifications/:email", addNotification)
+	//e.PUT("/notifications/:email", addNotification) // Notifications are only added server-side.
 
 	var err error
 	db, err := gorm.Open("postgres", "host=localhost user=cbono dbname=crypto sslmode=disable password=cbono")
@@ -195,9 +198,9 @@ func main() {
 	}
 
 	db.AutoMigrate(&Alert{}, &Notification{})
-	db.Model(&Alert{}).AddIndex("idx_email", "email")
-	db.Model(&Notification{}).AddIndex("idx_email", "email")
-	db.Model(&Notification{}).AddForeignKey("alertId", "alerts(ID)", "RESTRICT", "RESTRICT")
+	db.Model(&Alert{}).AddIndex("alert_idx_email", "email")
+	db.Model(&Notification{}).AddIndex("not_idx_email", "email")
+	db.Model(&Notification{}).AddForeignKey("alert_id", "alerts(ID)", "RESTRICT", "RESTRICT")
 
 	// Start the web server.
 	port := ":9006"

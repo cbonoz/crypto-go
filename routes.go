@@ -43,7 +43,7 @@ func deleteAlert(c echo.Context) error {
 
 func getAlerts(c echo.Context) error {
 	email := c.Param("email")
-	rows, err := db.Raw("SELECT name FROM alerts WHERE email = $1", email).Rows()
+	rows, err := db.Raw("SELECT * FROM alerts WHERE email = $1", email).Rows()
 	defer rows.Close()
 
 	if (err != nil) {
@@ -66,22 +66,25 @@ func getNotifications(c echo.Context) error {
 }
 
 func addAlert(c echo.Context) error {
-	email := c.Param("email")
 	name := c.Param("name")
+	email := c.Param("email")
 	coin := c.Param("coin")
 	notes := c.Param("notes")
 	timeDelta := c.Param("time_delta")
+	thresholdString := c.Param("threshold_delta")
+	activeString := c.Param("active")
 
-	thresholdDelta, err  := strconv.ParseFloat(c.Param("threshold_delta"), 64)
+	thresholdDelta, err  := strconv.ParseFloat(thresholdString, 64)
 	if (err != nil) {
 		return c.String(http.StatusBadRequest, "threshold must be a float")
 	}
 
-	active,err  := strconv.ParseBool(c.Param("active"))
+	active, err  := strconv.ParseBool(activeString)
 	if (err != nil) {
 		return c.String(http.StatusBadRequest, "active must be a true or false value")
 	}
-	alert := Alert{name: name, email: email, coin: coin, thresholdDelta: thresholdDelta, timeDelta: timeDelta, notes: notes, active: active}
+	alert := Alert{Name: name, Email: email, Coin: coin, ThresholdDelta: thresholdDelta, TimeDelta: timeDelta,
+		Notes: notes, Active: active}
 
 	db.Create(&alert)
 
