@@ -5,7 +5,6 @@ import (
 	"github.com/jasonlvhit/gocron"
 	"net/http"
 	"github.com/labstack/echo"
-	_ "github.com/lib/pq"
 	"github.com/buger/jsonparser"
 	"io/ioutil"
 	sms "stathat.com/c/amzses"
@@ -17,10 +16,11 @@ import (
 
 type Alert struct {
 	gorm.Model
-	email          string `json:"name"`
+	name          string `json:"name"`
+	email         string `json:"email"`
 	coin           string `json:"coin"` // currency symbol
-	timeDelta      string `json:"time_delta"`
 	thresholdDelta float64 `json:"threshold_delta"`
+	timeDelta      string `json:"time_delta"`
 	notes          string `json:"notes"`
 	active         bool `json:"active"`
 }
@@ -28,7 +28,7 @@ type Alert struct {
 type Notification struct {
 	gorm.Model
 	alertId        uint `json:"alert_id"`
-	email          string `json:"name"`
+	email          string `json:"email"`
 	coin           string `json:"coin"`
 	currentDelta   float64 `json:"current_delta"`
 	thresholdDelta float64 `json:"threshold_delta"`
@@ -41,7 +41,7 @@ const appName = "CryptoAlarms"
 const emailDisplayName = "CryptoAlarms Notifications"
 const domain = "https=//www.cryptoalarms.com/"
 const adminEmail = "chris@blackshoalgroup.com"
-const SIX_HOURS_MS = 1000 * 60 * 60 * 6
+const MIN_HOUR_EMAIL_INTERVAL = 12
 
 
 func insertNotification(n Notification) {
@@ -84,9 +84,9 @@ func noRecentViolations(email string, coin string) bool {
 	rows.Next()
 	var notification Notification
 	rows.Scan(&notification)
-	// Return if the last notification was Created more than 6 hours ago.
+	// Return false if the last notification was Created within the minimum interval.
 	diff := time.Now().Sub(notification.CreatedAt)
-	return diff.Hours() >= 6
+	return diff.Hours() >= MIN_HOUR_EMAIL_INTERVAL
 }
 
 func runCoinTask() {
@@ -197,7 +197,7 @@ func main() {
 	db.AutoMigrate(&Alert{}, &Notification{})
 	db.Model(&Alert{}).AddIndex("idx_email", "email")
 	db.Model(&Notification{}).AddIndex("idx_email", "email")
-	db.Model(&Notification{}).AddForeignKey("alert_id", "alerts(id)", "RESTRICT", "RESTRICT")
+	db.Model(&Notification{}).AddForeignKey("alertId", "alerts(ID)", "RESTRICT", "RESTRICT")
 
 	// Start the web server.
 	port := ":9006"

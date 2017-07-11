@@ -67,6 +67,7 @@ func getNotifications(c echo.Context) error {
 
 func addAlert(c echo.Context) error {
 	email := c.Param("email")
+	name := c.Param("name")
 	coin := c.Param("coin")
 	notes := c.Param("notes")
 	timeDelta := c.Param("time_delta")
@@ -80,7 +81,7 @@ func addAlert(c echo.Context) error {
 	if (err != nil) {
 		return c.String(http.StatusBadRequest, "active must be a true or false value")
 	}
-	alert := Alert{email: email, coin: coin, thresholdDelta: thresholdDelta, timeDelta: timeDelta, notes: notes, active: active}
+	alert := Alert{name: name, email: email, coin: coin, thresholdDelta: thresholdDelta, timeDelta: timeDelta, notes: notes, active: active}
 
 	db.Create(&alert)
 
