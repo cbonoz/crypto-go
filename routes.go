@@ -65,6 +65,12 @@ func getNotifications(c echo.Context) error {
 	return c.String(http.StatusOK, getArrayStringFromRows(rows))
 }
 
+func countNotifications(c echo.Context) error {
+	var count int64
+	db.Table("notifications").Count(&count)
+	return c.String(http.StatusOK, string(count))
+}
+
 func addAlert(c echo.Context) error {
 	name := c.Param("name")
 	email := c.Param("email")
