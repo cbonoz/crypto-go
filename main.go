@@ -169,6 +169,7 @@ func main() {
 
 	// CORS default
 	// Allows requests from any origin wth GET, HEAD, PUT, POST or DELETE method.
+	// TODO: remove CORS - ONLY ALLOW REQUESTS THAT ORIGINATE FROM THE WEBSITE (security risk).
 	e.Use(middleware.CORS())
 
 	// CORS restricted

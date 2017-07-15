@@ -17,8 +17,8 @@ var (
 	mockNotificationDB = map[string]*Notification{"jon@labstack.com":
 	&Notification{Email:"jon@labstack.com", Coin: "BTC", ThresholdDelta:.7, CurrentDelta:.8},
 	}
-	alertJson = `{"name": "test alert", "email":"job@labstack.com","coin":"BTC","notes":"", "thresholdDelta":.7, "active":false}`
-	notificationJson = `{"email":"json@labstack.com", "coin":"BTC", "currentDelta":.8,"thresholdDelta":.7}`
+	alertJson = `{"ID":0,"CreatedAt":"0001-01-01T00:00:00Z","UpdatedAt":"0001-01-01T00:00:00Z","DeletedAt":null,"name":"btc alert","email":"jon@labstack.com","coin":"BTC","threshold_delta":0.7,"time_delta":"7d","notes":"","active":false}`
+	notificationJson = `{"ID":0,"CreatedAt":"0001-01-01T00:00:00Z","UpdatedAt":"0001-01-01T00:00:00Z","DeletedAt":null,"AlertId":0,"Email":"jon@labstack.com","Coin":"BTC","CurrentDelta":0.8,"ThresholdDelta":0.7}`
 )
 
 func TestCreateAlert(t *testing.T) {
@@ -54,7 +54,6 @@ func TestGetAlerts(t *testing.T) {
 		assert.Equal(t, alertJson, rec.Body.String())
 	}
 }
-
 
 func TestCreateNotification(t *testing.T) {
 	// Setup
