@@ -17,6 +17,10 @@ import (
 	"strings"
 )
 
+type UserEmail struct {
+	Email string `json:"email" form:"email" query:"email"`
+}
+
 type Alert struct {
 	gorm.Model
 	Name           string `json:"name"`
@@ -119,11 +123,13 @@ func isViolation(change float64, threshold float64) bool {
 func noRecentViolations(email string, coin string) bool {
 	// Retrieve the latest alert for the user for this particular Coin (if present).
 	var notification Notification
-	err := db.Table("notifications").Where("coin = $1 and email = $2", coin, email).Order("created_at desc").First(&notification)
+	var err error
+	err = db.Table("notifications").Where("coin = ? and email = ?", coin, email).Order("created_at desc").First(&notification).Error
 
 	// Return false if the last notification was Created within the minimum interval.
 	if (err != nil) {
 		log.Debugf("First notification for (%s, %s)", coin, email)
+		log.Error(err)
 		return true
 	}
 
@@ -170,7 +176,7 @@ func getCurrencyPrices() map[string]CoinInfo {
 }
 
 func runCoinTask() {
-	fmt.Println("runCoinTask")
+	log.Debugf("runCoinTask: %s" + time.Now().String())
 	var alerts []Alert
 
 	db.Table("alerts").Where("active = true").Find(&alerts)
@@ -248,6 +254,7 @@ func runCoinTask() {
 	} // end row (alert config) iteration.
 
 	log.Debug("done scanning alert table")
+	log.Debugf("generating the following notifications:")
 	printNotificationMap(notificationMap)
 	// Send out the aggregated emails.
 	for email, alertMap := range notificationMap {
@@ -259,8 +266,11 @@ func runCoinTask() {
 
 func scheduleTask() {
 	// runCoinTask executes each 30 minutes.
+	var interval uint64
+	interval = 30
+	log.Debugf("scheuled alert task for every %d minutes", interval)
 	s := gocron.NewScheduler()
-	s.Every(30).Minutes().Do(runCoinTask)
+	s.Every(interval).Minutes().Do(runCoinTask)
 	<-s.Start()
 }
 
@@ -324,9 +334,8 @@ func main() {
 	db.Model(&Notification{}).AddIndex("not_idx_email", "email")
 	db.Model(&Notification{}).AddForeignKey("alert_id", "alerts(ID)", "RESTRICT", "RESTRICT")
 
-	runCoinTask()
-	// TODO: readd task schedule after testing.
-	//scheduleTask()
+	//runCoinTask()
+	scheduleTask()
 
 	// Start the web server.
 	port := ":9006"
