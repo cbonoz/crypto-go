@@ -5,15 +5,16 @@ import (
 	"github.com/jasonlvhit/gocron"
 	"net/http"
 	"github.com/labstack/echo"
-	"github.com/buger/jsonparser"
 	"io/ioutil"
-	sms "stathat.com/c/amzses"
+	//sms "stathat.com/c/amzses"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/postgres"
 	"github.com/op/go-logging"
 	"time"
 	"github.com/labstack/echo/middleware"
 	"strconv"
+	"encoding/json"
+	"strings"
 )
 
 type Alert struct {
@@ -23,7 +24,6 @@ type Alert struct {
 	Coin           string `json:"coin"`
 	ThresholdDelta float64 `json:"threshold_delta"`
 	TimeDelta      string `json:"time_delta"`
-	Notes          string `json:"notes"`
 	Active         bool `json:"active"`
 }
 
@@ -34,55 +34,139 @@ type Notification struct {
 	Coin           string
 	CurrentDelta   float64
 	ThresholdDelta float64
+	TimeDelta      string `json:"time_delta"`
+	LastUpdated    int64
+}
+
+type CoinInfo struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Symbol       string `json:"symbol"`
+	Rank         string `json:"rank"`
+	PriceUSD     string `json:"price_usd"`
+	PriceBTC     string `json:"price_btc"`
+	Volume24     string `json:"24h_volume_usd"`
+	MarketCapUSD string `json:"market_cap_usd"`
+	Supply       string `json:"available_supply"`
+	TotalSupply  string `json:"total_supply"`
+	Change1h     string `json:"percent_change_1h"`
+	Change24h    string `json:"percent_change_24h"`
+	Change7d     string `json:"percent_change_7d"`
+	LastUpdated  string `json:"last_updated"`
 }
 
 var db *gorm.DB
 var log = logging.MustGetLogger("crypto")
 
-const appName = "CryptoAlarms"
-const emailDisplayName = "CryptoAlarms Notifications"
-const domain = "https=//www.cryptoalarms.com/"
-const adminEmail = "chris@blackshoalgroup.com"
 const MIN_HOUR_EMAIL_INTERVAL = 12
+const COIN_API = "https://api.Coinmarketcap.com/v1/ticker/";
+
+func makeTimestamp() int64 {
+	return time.Now().UnixNano() / int64(time.Millisecond)
+}
+
+func unixMilli(t time.Time) int64 {
+	return t.Round(time.Millisecond).UnixNano() / (int64(time.Millisecond) / int64(time.Nanosecond))
+}
+
 
 func insertNotification(n Notification) {
+	log.Debugf("Inserting notification: %s", n)
 	db.Create(&n)
 }
 
-func sendNotificationsToUser(email string, ns []Notification) string {
-	var body = createEmailBodyFromNotifications(ns)
-	var subject = fmt.Sprintf("[%s] Coins passed change threshold.",
-		emailDisplayName)
+func min(a, b int) int {
+	if a <= b {
+		return a
+	}
+	return b
+}
+
+
+func sendNotificationsToUser(email string, alertMap map[string]Notification) string {
+	const adminEmail = "chris@blackshoalgroup.com"
+	const emailDisplayName = "CryptoAlarms Notifications"
+
+	var coinsArr []string
+
+	var alertNames []string
+	var ns []Notification
+	for alertName, notification := range alertMap {
+		coinsArr = append(coinsArr, notification.Coin)
+		ns = append(ns, notification)
+		alertNames = append(alertNames, alertName)
+	}
+	coinString := strings.Join(coinsArr, ", ")
+	coinString = coinString[0:min(len(coinString), 20)] // cap the string length at 20.
+
+	var subject = fmt.Sprintf("[%s] %s passed change threshold.", emailDisplayName, coinString)
+	//var body = createEmailBodyFromNotifications(alertNames, ns)
 
 	// func SendMailHTML(from, to, subject, bodyText, bodyHTML string) (string, error)
 
-	res, err := sms.SendMailHTML(adminEmail, email, subject, "", body)
-	if (err != nil) {
-		log.Error(email, err.Error())
-	}
+	//res, err := sms.SendMailHTML(adminEmail, email, subject, "", body)
+	//if (err != nil) {
+	//	log.Error(email, err.Error())
+	//}
 
-	return res
+	return subject
 }
 
 func isViolation(change float64, threshold float64) bool {
 	return (threshold < 0 && change < threshold) || (threshold > 0 && change > threshold)
 }
 
-func noRecentViolations(email string, Coin string) bool {
+func noRecentViolations(email string, coin string) bool {
 	// Retrieve the latest alert for the user for this particular Coin (if present).
-	rows, err := db.Raw("select * from Notifications where Created_at = " +
-		"(select max(Created_at) from Notifications where email = $1 and Coin = $2) " +
-		"and email = $1 and Coin = $2", email, Coin).Rows()
+	var notification Notification
+	err := db.Table("notifications").Where("coin = $1 and email = $2", coin, email).Order("created_at desc").First(&notification)
+
+	// Return false if the last notification was Created within the minimum interval.
 	if (err != nil) {
-		return true // no rows.
+		log.Debugf("First notification for (%s, %s)", coin, email)
+		return true
 	}
 
-	rows.Next()
-	var notification Notification
-	rows.Scan(&notification)
-	// Return false if the last notification was Created within the minimum interval.
 	diff := time.Now().Sub(notification.CreatedAt)
-	return diff.Hours() >= MIN_HOUR_EMAIL_INTERVAL
+	noRecentViolation := diff.Hours() >= MIN_HOUR_EMAIL_INTERVAL
+	log.Debugf("Violation for coin %s, received notification within %d hours ago (hours ago: %d) - noRecentViolation(%s)",
+		coin, MIN_HOUR_EMAIL_INTERVAL, diff.Hours(), noRecentViolation)
+
+	return noRecentViolation
+}
+
+func printNotificationMap(x map[string]map[string]Notification) {
+	b, err := json.MarshalIndent(x, "", "  ")
+	if err != nil {
+		fmt.Println("error:", err)
+	}
+	fmt.Print(string(b))
+}
+
+func getCurrencyPrices() map[string]CoinInfo {
+	res, err := http.Get(COIN_API)
+	if (err != nil) {
+		log.Error(err.Error())
+	}
+
+	body, err := ioutil.ReadAll(res.Body)
+	if (err != nil) {
+		fmt.Println(err.Error())
+	}
+	var coinInfos []CoinInfo
+	err = json.Unmarshal(body, &coinInfos)
+	if (err != nil) {
+		fmt.Println("error unmarshalling coin api response", err.Error())
+	}
+
+	log.Debug("found coininfo for ", len(coinInfos), " coins")
+
+	var CoinDeltas = make(map[string]CoinInfo)
+	for _, coinInfo := range coinInfos {
+		coinSymbol := strings.ToUpper(coinInfo.Symbol)
+		CoinDeltas[coinSymbol] = coinInfo
+	}
+	return CoinDeltas
 }
 
 func runCoinTask() {
@@ -91,42 +175,61 @@ func runCoinTask() {
 
 	db.Table("alerts").Where("active = true").Find(&alerts)
 
-	log.Debug("Found $1 active alerts", len(alerts))
-	var CoinDeltas = make(map[string][]byte)
+	log.Debug("Found active alerts: ", len(alerts))
+	CoinDeltas := getCurrencyPrices()
 
-	var notificationMap = make(map[string][]Notification)
+	var notificationMap = make(map[string]map[string]Notification)
+	if (len(alerts) == 0) {
+		log.Debug("No active alerts")
+		return
+	}
+
 	for _, alert := range alerts {
 		// element is the element from someSlice for where we are
 
-		var CoinData []byte
-
-		if val, ok := CoinDeltas[alert.Coin]; ok {
-			CoinData = val
-		} else {
-			// Coin not present in map, retrieve from api.
-			res, err := http.Get("https://api.Coinmarketcap.com/v1/ticker/")
-			if (err != nil) {
-				log.Error(err.Error())
-			}
-
-			body, err := ioutil.ReadAll(res.Body)
-
-			CoinDeltas[alert.Coin] = body
-			CoinData = body
-			// Close the response body after usage is complete.
-			res.Body.Close()
+		coinSymbol := strings.ToUpper(alert.Coin)
+		coinInfo, ok := CoinDeltas[coinSymbol]
+		if !ok {
+			log.Error("Could not find coin ", coinSymbol, " in api response")
 		}
+
 
 		// Parse the Coin data for the change.
 		var change float64
-		if value, err := jsonparser.GetFloat(CoinData, alert.TimeDelta); err == nil {
-			change = value
+		var err error
+
+		switch alert.TimeDelta {
+		case "7d":
+			change, err = strconv.ParseFloat(coinInfo.Change7d, 64)
+		case "1h":
+			change, err = strconv.ParseFloat(coinInfo.Change1h, 64)
+		case "24h":
+			change, err = strconv.ParseFloat(coinInfo.Change24h, 64)
+		default:
+			log.Error("Unexpected alert.TimeDelta for alert ID($1): $2", alert.ID, alert.TimeDelta)
+			change, err = strconv.ParseFloat(coinInfo.Change1h, 64)
 		}
 
-		if (isViolation(change, alert.ThresholdDelta) && noRecentViolations(alert.Email, alert.Coin)) {
+		if (err != nil) {
+			log.Error(err.Error())
+		}
+
+		violation := isViolation(change, alert.ThresholdDelta)
+		log.Debugf("CoinInfo %s: %s", alert.Coin, coinInfo)
+		log.Debugf("Violation (%f, %f) - %s", change, alert.ThresholdDelta, violation)
+
+		if (violation && noRecentViolations(alert.Email, alert.Coin)) {
+
+			lastUpdated, err := strconv.ParseInt(coinInfo.LastUpdated, 10, 64)
+
+			if (err != nil) {
+				log.Error(err.Error())
+				lastUpdated = makeTimestamp()
+			}
+
 			notification := Notification{
-				AlertId: alert.ID, Email: alert.Email, Coin: alert.Coin,
-				CurrentDelta: change, ThresholdDelta: alert.ThresholdDelta,
+				AlertId: alert.ID, Email: alert.Email, Coin: alert.Coin, TimeDelta: alert.TimeDelta,
+				CurrentDelta: change, ThresholdDelta: alert.ThresholdDelta, LastUpdated: lastUpdated,
 			}
 
 			insertNotification(notification)
@@ -135,17 +238,18 @@ func runCoinTask() {
 			//	notificationMap[alert.email] = []
 			//}
 			// Append notification to list.
-			notificationMap[alert.Email] = append(notificationMap[alert.Email], notification)
+			notificationMap[alert.Email][alert.Name] = notification
 		} // else no violation, continue.
-
-
 	} // end row (alert config) iteration.
 
+	log.Debug("done scanning alert table")
+	printNotificationMap(notificationMap)
 	// Send out the aggregated emails.
-	for k, v := range notificationMap {
-		fmt.Printf("key[%s] value[%s]\n", k, v)
-		res := sendNotificationsToUser(k, v)
-		log.Debug(k, res)
+	for email, alertMap := range notificationMap {
+
+		fmt.Printf("key[%s] value[%v]\n", email, alertMap)
+		res := sendNotificationsToUser(email, alertMap)
+		log.Debug(email, res)
 	}
 }
 
@@ -157,8 +261,8 @@ func scheduleTask() {
 }
 
 func checkTables() {
-	log.Debug("alerts table:" +  strconv.FormatBool(db.HasTable("alerts")))
-	log.Debug("notifications table:" +  strconv.FormatBool(db.HasTable("notifications")))
+	log.Debug("alerts table:" + strconv.FormatBool(db.HasTable("alerts")))
+	log.Debug("notifications table:" + strconv.FormatBool(db.HasTable("notifications")))
 }
 
 func main() {
@@ -215,14 +319,14 @@ func main() {
 	db.Model(&Notification{}).AddIndex("not_idx_email", "email")
 	db.Model(&Notification{}).AddForeignKey("alert_id", "alerts(ID)", "RESTRICT", "RESTRICT")
 
+	runCoinTask()
+	// TODO: readd task schedule after testing.
+	//scheduleTask()
+
 	// Start the web server.
 	port := ":9006"
 	fmt.Println("Started server on port $1", port)
 	e.Logger.Error(e.Start(port))
-
-	runCoinTask()
-	// TODO: readd task schedule after testing.
-	//scheduleTask()
 }
 
 

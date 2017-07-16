@@ -6,24 +6,6 @@ import (
 	"encoding/json"
 )
 
-func deleteAlert(c echo.Context) error {
-	id := c.Param("id")
-	email := c.Param("email")
-	rows, err := db.Raw("delete * from alerts where id=$1 and email=$2", id, email).Rows()
-	defer rows.Close()
-
-	if (err != nil) {
-		return c.String(http.StatusBadRequest, err.Error())
-	}
-
-	res, err := json.Marshal(id)
-	if (err != nil) {
-		return c.String(http.StatusInternalServerError, err.Error())
-	}
-
-	return c.JSON(http.StatusOK, res)
-}
-
 func getAlerts(c echo.Context) error {
 	email := c.Param("email")
 	var alerts []Alert
@@ -54,6 +36,16 @@ func countNotifications(c echo.Context) error {
 	var count int64
 	db.Table("notifications").Count(&count)
 	return c.JSON(http.StatusOK, count)
+}
+
+func deleteAlert(c echo.Context) error {
+	alert := new(Alert)
+	if err := c.Bind(alert); err != nil {
+		return err
+	}
+	db.Delete(&alert)
+
+	return c.JSON(http.StatusOK, alert)
 }
 
 func addAlert(c echo.Context) error {

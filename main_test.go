@@ -7,12 +7,13 @@ import (
 	"strings"
 	"github.com/stretchr/testify/assert"
 	"net/http"
+	"fmt"
 )
 
 var (
 	mockAlertDB = map[string]*Alert{"jon@labstack.com":
 	&Alert{Name: "btc alert", Email:"jon@labstack.com",
-		Coin: "BTC", ThresholdDelta:.7, TimeDelta:"7d", Notes:""},
+		Coin: "BTC", ThresholdDelta:.7, TimeDelta:"7d"},
 	}
 	mockNotificationDB = map[string]*Notification{"jon@labstack.com":
 	&Notification{Email:"jon@labstack.com", Coin: "BTC", ThresholdDelta:.7, CurrentDelta:.8},
@@ -87,6 +88,22 @@ func TestGetNotifications(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Equal(t, notificationJson, rec.Body.String())
 	}
+}
+
+func TestEmailContentWithNotifications(t *testing.T) {
+	n1 := Notification{Email:"jon@labstack.com", Coin: "BTC", ThresholdDelta:.7, CurrentDelta:.8,
+		AlertId: 0, TimeDelta: "7d", LastUpdated:1500215347}
+	n2 := Notification{Email:"jon@labstack.com", Coin: "ETH", ThresholdDelta:.7, CurrentDelta:.8,
+		AlertId: 1, TimeDelta: "7d", LastUpdated:1500215347}
+
+	var notifications []Notification
+	notifications = append(notifications, n1, n2)
+
+	var alertNames []string
+	alertNames = append(alertNames, "TestAlertName 1", "TestAlertName 2")
+
+	bodyContent := createEmailBodyFromNotifications(alertNames, notifications)
+	fmt.Println(bodyContent)
 }
 
 
