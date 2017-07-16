@@ -48,6 +48,17 @@ func deleteAlert(c echo.Context) error {
 	return c.JSON(http.StatusOK, alert)
 }
 
+
+func deleteNotifications(c echo.Context) error {
+	alert := new(Alert)
+	if err := c.Bind(alert); err != nil {
+		return err
+	}
+	db.Delete(&alert)
+
+	return c.JSON(http.StatusOK, alert)
+}
+
 func addAlert(c echo.Context) error {
 	alert := new(Alert)
 	if err := c.Bind(alert); err != nil {
