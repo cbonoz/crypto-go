@@ -180,14 +180,17 @@ func runCoinTask() {
 
 	db.Table("alerts").Where("active = true").Find(&alerts)
 
-	log.Debug("Found active alerts: ", len(alerts))
+	numAlerts := len(alerts)
+	log.Debug("Found active alerts: ", numAlerts)
+
+	if (numAlerts == 0) {
+		log.Debugf("No active alerts, returning from runCoinTask")
+		return
+	}
+
 	CoinDeltas := getCurrencyPrices()
 
 	var notificationMap = make(map[string]map[string]Notification)
-	if (len(alerts) == 0) {
-		log.Debug("No active alerts")
-		return
-	}
 
 	for _, alert := range alerts {
 		// element is the element from someSlice for where we are
@@ -255,22 +258,13 @@ func runCoinTask() {
 	log.Debug("done scanning alert table")
 	log.Debugf("generating the following notifications:")
 	printNotificationMap(notificationMap)
-	// Send out the aggregated emails.
+
+	// Send out the aggregated coin notification emails to user recipients.
 	for email, alertMap := range notificationMap {
 		fmt.Printf("key[%s] value[%v]\n", email, alertMap)
 		res := sendNotificationsToUser(email, alertMap)
 		log.Debug(email, res)
 	}
-}
-
-func scheduleTask() {
-	// runCoinTask executes each 30 minutes.
-	var interval uint64
-	interval = 30
-	log.Debugf("scheuled alert task for every %d minutes", interval)
-	s := gocron.NewScheduler()
-	s.Every(interval).Minutes().Do(runCoinTask)
-	<-s.Start()
 }
 
 func checkTables() {
@@ -333,7 +327,7 @@ func main() {
 	db.Model(&Notification{}).AddIndex("notfication_idx_email", "email")
 	db.Model(&Notification{}).AddForeignKey("alert_id", "alerts(ID)", "RESTRICT", "RESTRICT")
 
-	//runCoinTask()
+	// runCoinTask() // runs the coin check task once.
 	var interval uint64
 	interval = 30
 	s := gocron.NewScheduler()
@@ -345,7 +339,6 @@ func main() {
 	port := ":8443"
 	fmt.Println("Started server on port $1", port)
 	e.Logger.Error(e.Start(port))
-
 }
 
 
