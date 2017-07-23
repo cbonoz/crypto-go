@@ -73,7 +73,6 @@ func unixMilli(t time.Time) int64 {
 	return t.Round(time.Millisecond).UnixNano() / (int64(time.Millisecond) / int64(time.Nanosecond))
 }
 
-
 func insertNotification(n Notification) {
 	log.Debugf("Inserting notification: %s", n)
 	db.Create(&n)
@@ -287,16 +286,16 @@ func main() {
 
 	// CORS default
 	// Allows requests from any origin wth GET, HEAD, PUT, POST or DELETE method.
-	// TODO: remove CORS - ONLY ALLOW REQUESTS THAT ORIGINATE FROM THE WEBSITE (security risk).
-	e.Use(middleware.CORS())
+	// e.Use(middleware.CORS())
 
 	// CORS restricted
-	// Allows requests from any `https://labstack.com` or `https://labstack.net` origin
-	// wth GET, PUT, POST or DELETE method.
-	//e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-	//	AllowOrigins: []string{"https://labstack.com", "https://labstack.net"},
-	//	AllowMethods: []string{echo.GET, echo.PUT, echo.POST, echo.DELETE},
-	//}))
+	// Allows requests from particular web origins.
+	// with GET, PUT, POST or DELETE method.
+	// TODO: ONLY ALLOW REQUESTS THAT ORIGINATE FROM THE WEBSITE (security risk).
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"https://cryptoalarms.com", "https://www.cryptoalarms.com"},
+		AllowMethods: []string{echo.GET, echo.PUT, echo.POST, echo.DELETE},
+	}))
 
 	// Sample hello world routes (for testing).
 	e.GET("/hello", func(c echo.Context) error {
@@ -331,16 +330,22 @@ func main() {
 	checkTables()
 
 	db.Model(&Alert{}).AddIndex("alert_idx_email", "email")
-	db.Model(&Notification{}).AddIndex("not_idx_email", "email")
+	db.Model(&Notification{}).AddIndex("notfication_idx_email", "email")
 	db.Model(&Notification{}).AddForeignKey("alert_id", "alerts(ID)", "RESTRICT", "RESTRICT")
 
 	//runCoinTask()
-	scheduleTask()
+	var interval uint64
+	interval = 30
+	s := gocron.NewScheduler()
+	s.Every(interval).Minutes().Do(runCoinTask)
+	log.Debugf("scheduled alert task for every %d minutes", interval)
+	s.Start()
 
 	// Start the web server.
-	port := ":9006"
+	port := ":8443"
 	fmt.Println("Started server on port $1", port)
 	e.Logger.Error(e.Start(port))
+
 }
 
 
