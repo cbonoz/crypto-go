@@ -15,8 +15,12 @@ func getStringRow(field string, value string) string {
 func getFloatRow(field string, value float64) string {
 	return fmt.Sprintf("<b>%s</b>: %.2f<br/>", field, value)
 }
-func getIntRow(field string, value int64) string {
-	return fmt.Sprintf("<b>%s</b>: %s<br/>", field, value)
+//func getIntRow(field string, value int64) string {
+//	return fmt.Sprintf("<b>%s</b>: %s<br/>", field, value)
+//}
+
+func msToTime(msInt int64) (time.Time, error) {
+	return time.Unix(0, msInt*1000*int64(time.Millisecond)), nil
 }
 
 func prettyPrintNotifications(alertNames []string, ns []Notification) string {
@@ -24,12 +28,18 @@ func prettyPrintNotifications(alertNames []string, ns []Notification) string {
 	for i := range ns {
 		n := ns[i]
 		alertName := alertNames[i]
-		nString := fmt.Sprintf("%s%s%s%s%s",
+		dateUpdated, err := msToTime(n.LastUpdated)
+		if (err != nil) {
+			log.Error(err)
+		}
+
+		nString := fmt.Sprintf("%s%s%s%s%s%s",
 			getHeadingRow("Alert Name", alertName),
-			getStringRow("Coin Symbol", n.Coin),
+			getStringRow("Coin Name", n.CoinName),
+			getStringRow("Coin Symbol", n.CoinSymbol),
 			getFloatRow("Current % Change", n.CurrentDelta),
 			getFloatRow("Threshold % Change", n.ThresholdDelta),
-			getIntRow("As of time", unixMilli(time.Unix(0, n.LastUpdated))))
+			getStringRow("As of time", dateUpdated.UTC().String()))
 		s=append(s, nString)
 	}
 	return strings.Join(s, "<br/><hr/><br/>")

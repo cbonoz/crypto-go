@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 )
 
+const MAX_ALERTS = 5
+
 func getAlerts(c echo.Context) error {
 	email := c.Param("email")
 	var alerts []Alert
@@ -60,11 +62,19 @@ func deleteNotifications(c echo.Context) error {
 func addAlert(c echo.Context) error {
 	alert := new(Alert)
 	if err := c.Bind(alert); err != nil {
-		return err
+		return c.JSON(http.StatusInternalServerError, err)
 	}
-	db.Create(&alert)
 
-	return c.JSON(http.StatusCreated, alert)
+	email := alert.Email
+	var count int64
+	db.Table("alerts").Where("email = ?", email).Count(&count)
+
+	if (count > MAX_ALERTS) {
+		return c.JSON(http.StatusBadRequest, "You have a active alert limit max of " + string(MAX_ALERTS))
+	}
+
+	db.Create(&alert)
+	return c.JSON(http.StatusOK, alert)
 }
 
 
