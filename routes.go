@@ -44,8 +44,12 @@ func deleteAlert(c echo.Context) error {
 	if err := c.Bind(alert); err != nil {
 		return err
 	}
-	db.Delete(&alert)
+	log.Debugf("Deleting alert id: %s", alert.ID)
+	err := db.Delete(&alert).Error
 
+	if (err != nil) {
+		return c.JSON(http.StatusBadRequest, err)
+	}
 	return c.JSON(http.StatusOK, alert)
 }
 

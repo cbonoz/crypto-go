@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"strings"
 	"github.com/levigross/grequests"
+	"os"
 )
 
 type UserEmail struct {
@@ -199,7 +200,6 @@ func runCoinTask() {
 		// element is the element from someSlice for where we are
 
 
-
 		coinMapKey := createCoinKey(alert.CoinSymbol, alert.CoinName)
 		coinInfo, ok := CoinDeltas[coinMapKey]
 		if !ok {
@@ -281,7 +281,36 @@ func checkTables() {
 	log.Debug("notifications table:" + strconv.FormatBool(db.HasTable("notifications")))
 }
 
+
+// Example format string. Everything except the message has a custom color
+// which is dependent on the log level. Many fields have a custom output
+// formatting too, eg. the time returns the hour down to the milli second.
+var format = logging.MustStringFormatter(
+	//`%{color}%{time:15:04:05.000} %{shortfunc} ▶ %{level:.4s} %{id:03x}%{color:reset} %{message}`,
+	`%{color}%{time:15:04:05.000} %{shortfunc} ▶ %{level:.3s} %{color:reset} %{message}`,
+)
+
+func configureLogging() {
+	errorBackend := logging.NewLogBackend(os.Stderr, "", 0)
+	debugBackend := logging.NewLogBackend(os.Stdout, "", 0)
+
+	// For messages written to backend2 we want to add some additional
+	// information to the output, including the used log level and the name of
+	// the function.
+	debugBackendFormatter := logging.NewBackendFormatter(debugBackend, format)
+
+	// Only errors and more severe messages should be sent to backend1
+	errorBackendLeveled := logging.AddModuleLevel(errorBackend)
+	errorBackendLeveled.SetLevel(logging.ERROR, "")
+
+	// Set the backends to be used.
+	logging.SetBackend(errorBackendLeveled, debugBackendFormatter)
+	log.Debugf("configured logging successfully")
+}
+
 func main() {
+
+	configureLogging()
 
 	e := echo.New()
 	e.Use(middleware.Logger())
