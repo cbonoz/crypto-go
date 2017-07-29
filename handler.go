@@ -21,7 +21,7 @@ func (h *alertHandler) createAlert(c echo.Context) error {
 	if err := c.Bind(u); err != nil {
 		return err
 	}
-	return c.JSON(http.StatusCreated, u)
+	return c.JSON(http.StatusOK, u)
 }
 
 func (h *alertHandler) getAlerts(c echo.Context) error {
@@ -38,7 +38,7 @@ func (h *notificationHandler) createNotification(c echo.Context) error {
 	if err := c.Bind(u); err != nil {
 		return err
 	}
-	return c.JSON(http.StatusCreated, u)
+	return c.JSON(http.StatusOK, u)
 }
 
 func (h *notificationHandler) getNotifications(c echo.Context) error {

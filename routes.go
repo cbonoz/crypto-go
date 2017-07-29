@@ -4,9 +4,8 @@ import (
 	"github.com/labstack/echo"
 	"net/http"
 	"encoding/json"
+	"fmt"
 )
-
-const MAX_ALERTS = 5
 
 func getAlerts(c echo.Context) error {
 	email := c.Param("email")
@@ -67,10 +66,11 @@ func addAlert(c echo.Context) error {
 
 	email := alert.Email
 	var count int64
-	db.Table("alerts").Where("email = ?", email).Count(&count)
+	db.Table("alerts").Where("email = ? and deleted_at is null", email).Count(&count)
 
-	if (count > MAX_ALERTS) {
-		return c.JSON(http.StatusBadRequest, "You have a active alert limit max of " + string(MAX_ALERTS))
+	if (count > 5) {
+		return c.JSON(http.StatusBadRequest,
+			fmt.Sprintf("This alert would exceed the active alert limit of 5 (currently at %d)", count))
 	}
 
 	db.Create(&alert)
